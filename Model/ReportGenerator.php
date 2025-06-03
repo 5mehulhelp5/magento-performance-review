@@ -53,9 +53,9 @@ class ReportGenerator
             $grouped[$category][] = $issue;
         }
         
-        // Sort categories to show Config first, then Modules, then Codebase
+        // Sort categories to show in logical order
         $sortedGrouped = [];
-        $categoryOrder = ['Config', 'Modules', 'Codebase'];
+        $categoryOrder = ['Config', 'Database', 'Indexing', 'Cron', 'Frontend', 'Modules', 'Third-party', 'Codebase', 'API'];
         
         foreach ($categoryOrder as $category) {
             if (isset($grouped[$category])) {

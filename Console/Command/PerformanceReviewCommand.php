@@ -9,6 +9,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Performance\Review\Model\ConfigurationChecker;
 use Performance\Review\Model\ModuleAnalyzer;
 use Performance\Review\Model\CodebaseAnalyzer;
+use Performance\Review\Model\DatabaseAnalyzer;
+use Performance\Review\Model\FrontendAnalyzer;
+use Performance\Review\Model\IndexerCronAnalyzer;
+use Performance\Review\Model\ThirdPartyAnalyzer;
+use Performance\Review\Model\ApiAnalyzer;
 use Performance\Review\Model\ReportGenerator;
 
 class PerformanceReviewCommand extends Command
@@ -16,18 +21,33 @@ class PerformanceReviewCommand extends Command
     private ConfigurationChecker $configurationChecker;
     private ModuleAnalyzer $moduleAnalyzer;
     private CodebaseAnalyzer $codebaseAnalyzer;
+    private DatabaseAnalyzer $databaseAnalyzer;
+    private FrontendAnalyzer $frontendAnalyzer;
+    private IndexerCronAnalyzer $indexerCronAnalyzer;
+    private ThirdPartyAnalyzer $thirdPartyAnalyzer;
+    private ApiAnalyzer $apiAnalyzer;
     private ReportGenerator $reportGenerator;
 
     public function __construct(
         ConfigurationChecker $configurationChecker,
         ModuleAnalyzer $moduleAnalyzer,
         CodebaseAnalyzer $codebaseAnalyzer,
+        DatabaseAnalyzer $databaseAnalyzer,
+        FrontendAnalyzer $frontendAnalyzer,
+        IndexerCronAnalyzer $indexerCronAnalyzer,
+        ThirdPartyAnalyzer $thirdPartyAnalyzer,
+        ApiAnalyzer $apiAnalyzer,
         ReportGenerator $reportGenerator,
         string $name = null
     ) {
         $this->configurationChecker = $configurationChecker;
         $this->moduleAnalyzer = $moduleAnalyzer;
         $this->codebaseAnalyzer = $codebaseAnalyzer;
+        $this->databaseAnalyzer = $databaseAnalyzer;
+        $this->frontendAnalyzer = $frontendAnalyzer;
+        $this->indexerCronAnalyzer = $indexerCronAnalyzer;
+        $this->thirdPartyAnalyzer = $thirdPartyAnalyzer;
+        $this->apiAnalyzer = $apiAnalyzer;
         $this->reportGenerator = $reportGenerator;
         parent::__construct($name);
     }
@@ -46,7 +66,7 @@ class PerformanceReviewCommand extends Command
                 'category',
                 'c',
                 InputOption::VALUE_OPTIONAL,
-                'Run review for specific category only (config, modules, codebase)'
+                'Run review for specific category only (config, modules, codebase, database, frontend, indexing, thirdparty, api)'
             )
             ->addOption(
                 'no-color',
@@ -87,6 +107,46 @@ class PerformanceReviewCommand extends Command
             $output->write('Analyzing codebase... ');
             $codebaseIssues = $this->codebaseAnalyzer->analyzeCodebase();
             $issues = array_merge($issues, $codebaseIssues);
+            $output->writeln('<info>✓</info>');
+        }
+        
+        // Run database analysis
+        if (!$category || $category === 'database') {
+            $output->write('Analyzing database... ');
+            $databaseIssues = $this->databaseAnalyzer->analyzeDatabase();
+            $issues = array_merge($issues, $databaseIssues);
+            $output->writeln('<info>✓</info>');
+        }
+        
+        // Run frontend analysis
+        if (!$category || $category === 'frontend') {
+            $output->write('Analyzing frontend configuration... ');
+            $frontendIssues = $this->frontendAnalyzer->analyzeFrontend();
+            $issues = array_merge($issues, $frontendIssues);
+            $output->writeln('<info>✓</info>');
+        }
+        
+        // Run indexer and cron analysis
+        if (!$category || $category === 'indexing') {
+            $output->write('Analyzing indexers and cron... ');
+            $indexerCronIssues = $this->indexerCronAnalyzer->analyzeIndexerCron();
+            $issues = array_merge($issues, $indexerCronIssues);
+            $output->writeln('<info>✓</info>');
+        }
+        
+        // Run third-party extension analysis
+        if (!$category || $category === 'thirdparty') {
+            $output->write('Analyzing third-party extensions... ');
+            $thirdPartyIssues = $this->thirdPartyAnalyzer->analyzeThirdPartyExtensions();
+            $issues = array_merge($issues, $thirdPartyIssues);
+            $output->writeln('<info>✓</info>');
+        }
+        
+        // Run API analysis
+        if (!$category || $category === 'api') {
+            $output->write('Analyzing API configuration... ');
+            $apiIssues = $this->apiAnalyzer->analyzeApi();
+            $issues = array_merge($issues, $apiIssues);
             $output->writeln('<info>✓</info>');
         }
         
