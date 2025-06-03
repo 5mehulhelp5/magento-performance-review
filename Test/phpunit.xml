@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+/**
+ * Copyright © Performance, Inc. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="http://schema.phpunit.de/9.1/phpunit.xsd"
+         colors="true"
+         columns="max"
+         beStrictAboutCoversAnnotation="false"
+         bootstrap="./framework/bootstrap.php"
+         stderr="true"
+>
+    <testsuites>
+        <testsuite name="Performance Review Unit Tests">
+            <directory>Unit</directory>
+        </testsuite>
+    </testsuites>
+    <coverage>
+        <include>
+            <directory suffix=".php">../Model</directory>
+            <directory suffix=".php">../Api</directory>
+            <directory suffix=".php">../Console</directory>
+        </include>
+    </coverage>
+</phpunit>

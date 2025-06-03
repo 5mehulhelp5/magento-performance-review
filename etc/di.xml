@@ -6,11 +6,38 @@
  */
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Interface preferences -->
+    <preference for="Performance\Review\Api\ConfigurationCheckerInterface" type="Performance\Review\Model\ConfigurationChecker" />
+    <preference for="Performance\Review\Api\Data\IssueInterface" type="Performance\Review\Model\Issue" />
+    
+    <!-- Command configuration -->
     <type name="Magento\Framework\Console\CommandList">
         <arguments>
             <argument name="commands" xsi:type="array">
                 <item name="performance_review_generate" xsi:type="object">Performance\Review\Console\Command\PerformanceReviewCommand</item>
             </argument>
+        </arguments>
+    </type>
+    
+    <!-- Virtual types for specific loggers -->
+    <virtualType name="Performance\Review\Logger" type="Magento\Framework\Logger\Monolog">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="debug" xsi:type="object">Performance\Review\Logger\Handler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    
+    <virtualType name="Performance\Review\Logger\Handler" type="Magento\Framework\Logger\Handler\Base">
+        <arguments>
+            <argument name="fileName" xsi:type="string">/var/log/performance_review.log</argument>
+        </arguments>
+    </virtualType>
+    
+    <!-- Logger injection -->
+    <type name="Performance\Review\Model\ConfigurationChecker">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
         </arguments>
     </type>
 </config>

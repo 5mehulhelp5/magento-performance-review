@@ -1,17 +1,41 @@
 <?php
+/**
+ * Copyright © Performance, Inc. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+declare(strict_types=1);
 
 namespace Performance\Review\Model;
 
+use Performance\Review\Api\Data\IssueInterface;
+
+/**
+ * Report generator for performance issues
+ *
+ * @since 1.0.0
+ */
 class ReportGenerator
 {
+    /**
+     * Priority color mappings
+     */
     private const PRIORITY_COLORS = [
-        'High' => "\033[31m",    // Red
-        'Medium' => "\033[33m",  // Yellow
-        'Low' => "\033[32m"      // Green
+        IssueInterface::PRIORITY_HIGH => "\033[31m",    // Red
+        IssueInterface::PRIORITY_MEDIUM => "\033[33m",  // Yellow
+        IssueInterface::PRIORITY_LOW => "\033[32m"      // Green
     ];
 
+    /**
+     * Reset color constant
+     */
     private const RESET_COLOR = "\033[0m";
 
+    /**
+     * Generate performance report
+     *
+     * @param IssueInterface[] $issues
+     * @return string
+     */
     public function generateReport(array $issues): string
     {
         $report = $this->generateHeader();
@@ -30,6 +54,11 @@ class ReportGenerator
         return $report;
     }
 
+    /**
+     * Generate report header
+     *
+     * @return string
+     */
     private function generateHeader(): string
     {
         $header = "\n";
@@ -42,11 +71,17 @@ class ReportGenerator
         return $header;
     }
 
+    /**
+     * Group issues by category
+     *
+     * @param IssueInterface[] $issues
+     * @return array
+     */
     private function groupIssuesByCategory(array $issues): array
     {
         $grouped = [];
         foreach ($issues as $issue) {
-            $category = $issue['category'] ?? 'Other';
+            $category = $issue->getCategory() ?: 'Other';
             if (!isset($grouped[$category])) {
                 $grouped[$category] = [];
             }
@@ -65,22 +100,33 @@ class ReportGenerator
         }
         
         // Add any remaining categories
-        foreach ($grouped as $category => $issues) {
-            $sortedGrouped[$category] = $issues;
+        foreach ($grouped as $category => $categoryIssues) {
+            $sortedGrouped[$category] = $categoryIssues;
         }
         
         return $sortedGrouped;
     }
 
+    /**
+     * Generate category section
+     *
+     * @param string $category
+     * @param IssueInterface[] $issues
+     * @return string
+     */
     private function generateCategorySection(string $category, array $issues): string
     {
         $section = "== $category ==\n";
         $section .= str_repeat('-', 80) . "\n";
         
         // Sort issues by priority (High -> Medium -> Low)
-        usort($issues, function($a, $b) {
-            $priorities = ['High' => 3, 'Medium' => 2, 'Low' => 1];
-            return ($priorities[$b['priority']] ?? 0) - ($priorities[$a['priority']] ?? 0);
+        usort($issues, function(IssueInterface $a, IssueInterface $b) {
+            $priorities = [
+                IssueInterface::PRIORITY_HIGH => 3,
+                IssueInterface::PRIORITY_MEDIUM => 2,
+                IssueInterface::PRIORITY_LOW => 1
+            ];
+            return ($priorities[$b->getPriority()] ?? 0) - ($priorities[$a->getPriority()] ?? 0);
         });
         
         // Create table
@@ -88,9 +134,9 @@ class ReportGenerator
         $section .= str_repeat('-', 10) . '+' . str_repeat('-', 42) . '+' . str_repeat('-', 27) . "\n";
         
         foreach ($issues as $issue) {
-            $priority = $issue['priority'] ?? 'Unknown';
+            $priority = $issue->getPriority();
             $color = self::PRIORITY_COLORS[$priority] ?? '';
-            $recommendation = $this->truncateString($issue['issue'] ?? 'N/A', 40);
+            $recommendation = $this->truncateString($issue->getIssue(), 40);
             
             // First line of the table
             $section .= sprintf(
@@ -99,30 +145,30 @@ class ReportGenerator
                 $priority,
                 self::RESET_COLOR,
                 $recommendation,
-                $this->truncateString($issue['details'] ?? '', 25)
+                $this->truncateString($issue->getDetails(), 25)
             );
             
             // Additional details on separate lines if needed
-            if (strlen($issue['details'] ?? '') > 25) {
-                $detailLines = $this->wrapText($issue['details'], 65);
+            if (strlen($issue->getDetails()) > 25) {
+                $detailLines = $this->wrapText($issue->getDetails(), 65);
                 foreach (array_slice($detailLines, 1) as $line) {
                     $section .= sprintf("%-10s | %-40s | %s\n", "", "", $line);
                 }
             }
             
             // Show current vs recommended values
-            if (isset($issue['current_value']) && isset($issue['recommended_value'])) {
+            if ($issue->getCurrentValue() !== null && $issue->getRecommendedValue() !== null) {
                 $section .= sprintf(
                     "%-10s | %-40s | Current: %s\n",
                     "",
                     "",
-                    $issue['current_value']
+                    $issue->getCurrentValue()
                 );
                 $section .= sprintf(
                     "%-10s | %-40s | Recommended: %s\n",
                     "",
                     "",
-                    $issue['recommended_value']
+                    $issue->getRecommendedValue()
                 );
             }
             
@@ -133,6 +179,12 @@ class ReportGenerator
         return $section;
     }
 
+    /**
+     * Generate summary section
+     *
+     * @param IssueInterface[] $issues
+     * @return string
+     */
     private function generateSummary(array $issues): string
     {
         $summary = "== Summary ==\n";
@@ -140,13 +192,13 @@ class ReportGenerator
         
         // Count issues by priority
         $priorityCounts = [
-            'High' => 0,
-            'Medium' => 0,
-            'Low' => 0
+            IssueInterface::PRIORITY_HIGH => 0,
+            IssueInterface::PRIORITY_MEDIUM => 0,
+            IssueInterface::PRIORITY_LOW => 0
         ];
         
         foreach ($issues as $issue) {
-            $priority = $issue['priority'] ?? 'Unknown';
+            $priority = $issue->getPriority();
             if (isset($priorityCounts[$priority])) {
                 $priorityCounts[$priority]++;
             }
@@ -178,6 +230,13 @@ class ReportGenerator
         return $summary;
     }
 
+    /**
+     * Truncate string to specified length
+     *
+     * @param string $string
+     * @param int $length
+     * @return string
+     */
     private function truncateString(string $string, int $length): string
     {
         if (strlen($string) <= $length) {
@@ -186,6 +245,13 @@ class ReportGenerator
         return substr($string, 0, $length - 3) . '...';
     }
 
+    /**
+     * Wrap text to specified width
+     *
+     * @param string $text
+     * @param int $width
+     * @return array
+     */
     private function wrapText(string $text, int $width): array
     {
         $lines = [];

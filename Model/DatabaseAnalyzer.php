@@ -1,4 +1,9 @@
 <?php
+/**
+ * Copyright © Performance, Inc. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+declare(strict_types=1);
 
 namespace Performance\Review\Model;
 
@@ -6,68 +11,148 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Adapter\AdapterInterface;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
+use Magento\Framework\Exception\LocalizedException;
+use Performance\Review\Api\Data\IssueInterface;
+use Performance\Review\Model\IssueFactory;
+use Psr\Log\LoggerInterface;
 
+/**
+ * Database performance analyzer
+ *
+ * @since 1.0.0
+ */
 class DatabaseAnalyzer
 {
+    /**
+     * Size thresholds in GB
+     */
+    private const DATABASE_SIZE_WARNING_THRESHOLD = 20;
+    private const DATABASE_SIZE_CRITICAL_THRESHOLD = 50;
+    private const TABLE_SIZE_THRESHOLD_BYTES = 1073741824; // 1GB
+    
+    /**
+     * Product count thresholds
+     */
+    private const PRODUCT_COUNT_WARNING = 100000;
+    private const PRODUCT_COUNT_CRITICAL = 500000;
+    
+    /**
+     * Category count threshold
+     */
+    private const CATEGORY_COUNT_WARNING = 10000;
+    
+    /**
+     * Log table row thresholds
+     */
+    private const LOG_TABLE_ROW_THRESHOLD = 1000000;
+    
+    /**
+     * URL rewrite thresholds
+     */
+    private const URL_REWRITE_WARNING = 500000;
+    private const URL_REWRITE_CRITICAL = 1000000;
+
+    /**
+     * @var ResourceConnection
+     */
     private ResourceConnection $resourceConnection;
+
+    /**
+     * @var ProductCollectionFactory
+     */
     private ProductCollectionFactory $productCollectionFactory;
+
+    /**
+     * @var CategoryCollectionFactory
+     */
     private CategoryCollectionFactory $categoryCollectionFactory;
+
+    /**
+     * @var AdapterInterface
+     */
     private AdapterInterface $connection;
 
+    /**
+     * @var IssueFactory
+     */
+    private IssueFactory $issueFactory;
+
+    /**
+     * @var LoggerInterface
+     */
+    private LoggerInterface $logger;
+
+    /**
+     * Constructor
+     *
+     * @param ResourceConnection $resourceConnection
+     * @param ProductCollectionFactory $productCollectionFactory
+     * @param CategoryCollectionFactory $categoryCollectionFactory
+     * @param IssueFactory $issueFactory
+     * @param LoggerInterface $logger
+     */
     public function __construct(
         ResourceConnection $resourceConnection,
         ProductCollectionFactory $productCollectionFactory,
-        CategoryCollectionFactory $categoryCollectionFactory
+        CategoryCollectionFactory $categoryCollectionFactory,
+        IssueFactory $issueFactory,
+        LoggerInterface $logger
     ) {
         $this->resourceConnection = $resourceConnection;
         $this->productCollectionFactory = $productCollectionFactory;
         $this->categoryCollectionFactory = $categoryCollectionFactory;
         $this->connection = $resourceConnection->getConnection();
+        $this->issueFactory = $issueFactory;
+        $this->logger = $logger;
     }
 
+    /**
+     * Analyze database for performance issues
+     *
+     * @return IssueInterface[]
+     * @throws LocalizedException
+     */
     public function analyzeDatabase(): array
     {
         $issues = [];
 
-        // Check database size
-        $dbSizeIssues = $this->checkDatabaseSize();
-        if (!empty($dbSizeIssues)) {
+        try {
+            // Check database size
+            $dbSizeIssues = $this->checkDatabaseSize();
             $issues = array_merge($issues, $dbSizeIssues);
-        }
 
-        // Check table sizes
-        $tableSizeIssues = $this->checkTableSizes();
-        if (!empty($tableSizeIssues)) {
+            // Check table sizes
+            $tableSizeIssues = $this->checkTableSizes();
             $issues = array_merge($issues, $tableSizeIssues);
-        }
 
-        // Check product/category counts
-        $catalogIssues = $this->checkCatalogSize();
-        if (!empty($catalogIssues)) {
+            // Check product/category counts
+            $catalogIssues = $this->checkCatalogSize();
             $issues = array_merge($issues, $catalogIssues);
-        }
 
-        // Check flat tables
-        $flatTableIssues = $this->checkFlatTables();
-        if (!empty($flatTableIssues)) {
+            // Check flat tables
+            $flatTableIssues = $this->checkFlatTables();
             $issues = array_merge($issues, $flatTableIssues);
-        }
 
-        // Check log tables
-        $logTableIssues = $this->checkLogTables();
-        if (!empty($logTableIssues)) {
+            // Check log tables
+            $logTableIssues = $this->checkLogTables();
             $issues = array_merge($issues, $logTableIssues);
-        }
 
-        // Check URL rewrites
-        $urlRewriteIssues = $this->checkUrlRewrites();
-        if (!empty($urlRewriteIssues)) {
+            // Check URL rewrites
+            $urlRewriteIssues = $this->checkUrlRewrites();
             $issues = array_merge($issues, $urlRewriteIssues);
+        } catch (\Exception $e) {
+            $this->logger->error('Database analysis failed: ' . $e->getMessage());
+            throw new LocalizedException(__('Failed to analyze database: %1', $e->getMessage()));
         }
 
         return $issues;
     }
 
+    /**
+     * Check database size
+     *
+     * @return IssueInterface[]
+     */
     private function checkDatabaseSize(): array
     {
         $issues = [];
@@ -81,9 +166,9 @@ class DatabaseAnalyzer
             
             $sizeGb = (float) $this->connection->fetchOne($query, ['dbname' => $dbName]);
             
-            if ($sizeGb > 50) {
-                $issues[] = [
-                    'priority' => 'High',
+            if ($sizeGb > self::DATABASE_SIZE_CRITICAL_THRESHOLD) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_HIGH,
                     'category' => 'Database',
                     'issue' => 'Database size is very large',
                     'details' => sprintf(
@@ -92,10 +177,10 @@ class DatabaseAnalyzer
                     ),
                     'current_value' => sprintf('%.2f GB', $sizeGb),
                     'recommended_value' => 'Regular cleanup and archiving of old data'
-                ];
-            } elseif ($sizeGb > 20) {
-                $issues[] = [
-                    'priority' => 'Medium',
+                ]);
+            } elseif ($sizeGb > self::DATABASE_SIZE_WARNING_THRESHOLD) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_MEDIUM,
                     'category' => 'Database',
                     'issue' => 'Database size is growing large',
                     'details' => sprintf(
@@ -104,15 +189,20 @@ class DatabaseAnalyzer
                     ),
                     'current_value' => sprintf('%.2f GB', $sizeGb),
                     'recommended_value' => 'Monitor growth and plan for archiving'
-                ];
+                ]);
             }
         } catch (\Exception $e) {
-            // Skip if we can't determine database size
+            $this->logger->warning('Failed to check database size: ' . $e->getMessage());
         }
 
         return $issues;
     }
 
+    /**
+     * Check table sizes
+     *
+     * @return IssueInterface[]
+     */
     private function checkTableSizes(): array
     {
         $issues = [];
@@ -125,33 +215,41 @@ class DatabaseAnalyzer
                 ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
                 FROM information_schema.tables
                 WHERE table_schema = :dbname
-                AND (data_length + index_length) > 1073741824
+                AND (data_length + index_length) > :threshold
                 ORDER BY (data_length + index_length) DESC
                 LIMIT 10";
             
-            $tables = $this->connection->fetchAll($query, ['dbname' => $dbName]);
+            $tables = $this->connection->fetchAll($query, [
+                'dbname' => $dbName,
+                'threshold' => self::TABLE_SIZE_THRESHOLD_BYTES
+            ]);
             
             foreach ($tables as $table) {
                 $largeTables[] = sprintf('%s (%.2f GB)', $table['table_name'], $table['size_mb'] / 1024);
             }
             
             if (!empty($largeTables)) {
-                $issues[] = [
-                    'priority' => 'High',
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_HIGH,
                     'category' => 'Database',
                     'issue' => 'Large database tables detected',
                     'details' => 'The following tables are larger than 1GB: ' . implode(', ', array_slice($largeTables, 0, 5)),
                     'current_value' => count($largeTables) . ' tables over 1GB',
                     'recommended_value' => 'Review and clean up large tables, especially logs and temporary data'
-                ];
+                ]);
             }
         } catch (\Exception $e) {
-            // Skip if we can't check table sizes
+            $this->logger->warning('Failed to check table sizes: ' . $e->getMessage());
         }
 
         return $issues;
     }
 
+    /**
+     * Check catalog size
+     *
+     * @return IssueInterface[]
+     */
     private function checkCatalogSize(): array
     {
         $issues = [];
@@ -160,9 +258,9 @@ class DatabaseAnalyzer
             // Check product count
             $productCount = $this->productCollectionFactory->create()->getSize();
             
-            if ($productCount > 500000) {
-                $issues[] = [
-                    'priority' => 'High',
+            if ($productCount > self::PRODUCT_COUNT_CRITICAL) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_HIGH,
                     'category' => 'Database',
                     'issue' => 'Very large product catalog',
                     'details' => sprintf(
@@ -171,10 +269,10 @@ class DatabaseAnalyzer
                     ),
                     'current_value' => number_format($productCount) . ' products',
                     'recommended_value' => 'Use Elasticsearch, optimize indexers, consider catalog segmentation'
-                ];
-            } elseif ($productCount > 100000) {
-                $issues[] = [
-                    'priority' => 'Medium',
+                ]);
+            } elseif ($productCount > self::PRODUCT_COUNT_WARNING) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_MEDIUM,
                     'category' => 'Database',
                     'issue' => 'Large product catalog',
                     'details' => sprintf(
@@ -183,15 +281,15 @@ class DatabaseAnalyzer
                     ),
                     'current_value' => number_format($productCount) . ' products',
                     'recommended_value' => 'Monitor indexing performance, use partial indexing'
-                ];
+                ]);
             }
 
             // Check category count
             $categoryCount = $this->categoryCollectionFactory->create()->getSize();
             
-            if ($categoryCount > 10000) {
-                $issues[] = [
-                    'priority' => 'Medium',
+            if ($categoryCount > self::CATEGORY_COUNT_WARNING) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_MEDIUM,
                     'category' => 'Database',
                     'issue' => 'Large number of categories',
                     'details' => sprintf(
@@ -200,15 +298,20 @@ class DatabaseAnalyzer
                     ),
                     'current_value' => number_format($categoryCount) . ' categories',
                     'recommended_value' => 'Review category structure, implement caching strategies'
-                ];
+                ]);
             }
         } catch (\Exception $e) {
-            // Skip if we can't check catalog size
+            $this->logger->warning('Failed to check catalog size: ' . $e->getMessage());
         }
 
         return $issues;
     }
 
+    /**
+     * Check flat tables configuration
+     *
+     * @return IssueInterface[]
+     */
     private function checkFlatTables(): array
     {
         $issues = [];
@@ -216,33 +319,42 @@ class DatabaseAnalyzer
         try {
             // Check if flat tables are enabled
             $flatProductEnabled = $this->connection->fetchOne(
-                "SELECT value FROM core_config_data WHERE path = 'catalog/frontend/flat_catalog_product'"
+                "SELECT value FROM " . $this->connection->getTableName('core_config_data') . 
+                " WHERE path = :path",
+                ['path' => 'catalog/frontend/flat_catalog_product']
             );
             
             $flatCategoryEnabled = $this->connection->fetchOne(
-                "SELECT value FROM core_config_data WHERE path = 'catalog/frontend/flat_catalog_category'"
+                "SELECT value FROM " . $this->connection->getTableName('core_config_data') . 
+                " WHERE path = :path",
+                ['path' => 'catalog/frontend/flat_catalog_category']
             );
             
             // For large catalogs, flat tables might not be optimal
             $productCount = $this->productCollectionFactory->create()->getSize();
             
             if ($productCount > 50000 && $flatProductEnabled == '1') {
-                $issues[] = [
-                    'priority' => 'Medium',
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_MEDIUM,
                     'category' => 'Database',
                     'issue' => 'Flat catalog enabled for large catalog',
                     'details' => 'Flat catalog tables can become very large and slow with many products. Consider disabling for better performance.',
                     'current_value' => 'Flat catalog enabled',
                     'recommended_value' => 'Disable flat catalog for large catalogs'
-                ];
+                ]);
             }
         } catch (\Exception $e) {
-            // Skip if we can't check flat tables
+            $this->logger->warning('Failed to check flat tables: ' . $e->getMessage());
         }
 
         return $issues;
     }
 
+    /**
+     * Check log tables
+     *
+     * @return IssueInterface[]
+     */
     private function checkLogTables(): array
     {
         $issues = [];
@@ -254,66 +366,75 @@ class DatabaseAnalyzer
             'report_compared_product_index' => 'Product comparison tracking'
         ];
         
-        try {
-            foreach ($logTables as $table => $description) {
-                $count = $this->connection->fetchOne("SELECT COUNT(*) FROM {$table}");
-                
-                if ($count > 1000000) {
-                    $issues[] = [
-                        'priority' => 'High',
-                        'category' => 'Database',
-                        'issue' => sprintf('Large log table: %s', $table),
-                        'details' => sprintf(
-                            '%s table has %s rows. Large log tables impact performance.',
-                            $description,
-                            number_format($count)
-                        ),
-                        'current_value' => number_format($count) . ' rows',
-                        'recommended_value' => 'Configure log cleaning in Admin > System > Configuration > Advanced > System'
-                    ];
+        foreach ($logTables as $table => $description) {
+            try {
+                $tableName = $this->connection->getTableName($table);
+                if ($this->connection->isTableExists($tableName)) {
+                    $count = $this->connection->fetchOne("SELECT COUNT(*) FROM " . $tableName);
+                    
+                    if ($count > self::LOG_TABLE_ROW_THRESHOLD) {
+                        $issues[] = $this->issueFactory->create([
+                            'priority' => IssueInterface::PRIORITY_HIGH,
+                            'category' => 'Database',
+                            'issue' => sprintf('Large log table: %s', $table),
+                            'details' => sprintf(
+                                '%s table has %s rows. Large log tables impact performance.',
+                                $description,
+                                number_format((int) $count)
+                            ),
+                            'current_value' => number_format((int) $count) . ' rows',
+                            'recommended_value' => 'Configure log cleaning in Admin > System > Configuration > Advanced > System'
+                        ]);
+                    }
                 }
+            } catch (\Exception $e) {
+                $this->logger->warning('Failed to check log table ' . $table . ': ' . $e->getMessage());
             }
-        } catch (\Exception $e) {
-            // Skip tables that don't exist
         }
 
         return $issues;
     }
 
+    /**
+     * Check URL rewrites
+     *
+     * @return IssueInterface[]
+     */
     private function checkUrlRewrites(): array
     {
         $issues = [];
         
         try {
-            $count = $this->connection->fetchOne("SELECT COUNT(*) FROM url_rewrite");
+            $tableName = $this->connection->getTableName('url_rewrite');
+            $count = $this->connection->fetchOne("SELECT COUNT(*) FROM " . $tableName);
             
-            if ($count > 1000000) {
-                $issues[] = [
-                    'priority' => 'High',
+            if ($count > self::URL_REWRITE_CRITICAL) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_HIGH,
                     'category' => 'Database',
                     'issue' => 'Excessive URL rewrites',
                     'details' => sprintf(
                         'URL rewrite table has %s rows. This significantly impacts routing performance.',
-                        number_format($count)
+                        number_format((int) $count)
                     ),
-                    'current_value' => number_format($count) . ' URL rewrites',
+                    'current_value' => number_format((int) $count) . ' URL rewrites',
                     'recommended_value' => 'Clean up duplicate rewrites, disable automatic generation if not needed'
-                ];
-            } elseif ($count > 500000) {
-                $issues[] = [
-                    'priority' => 'Medium',
+                ]);
+            } elseif ($count > self::URL_REWRITE_WARNING) {
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_MEDIUM,
                     'category' => 'Database',
                     'issue' => 'Large number of URL rewrites',
                     'details' => sprintf(
                         'URL rewrite table has %s rows. Monitor performance impact.',
-                        number_format($count)
+                        number_format((int) $count)
                     ),
-                    'current_value' => number_format($count) . ' URL rewrites',
+                    'current_value' => number_format((int) $count) . ' URL rewrites',
                     'recommended_value' => 'Regularly clean up old URL rewrites'
-                ];
+                ]);
             }
         } catch (\Exception $e) {
-            // Skip if table doesn't exist
+            $this->logger->warning('Failed to check URL rewrites: ' . $e->getMessage());
         }
 
         return $issues;
