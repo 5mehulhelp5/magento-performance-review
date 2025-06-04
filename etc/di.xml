@@ -9,6 +9,9 @@
     <!-- Interface preferences -->
     <preference for="Performance\Review\Api\ConfigurationCheckerInterface" type="Performance\Review\Model\ConfigurationChecker" />
     <preference for="Performance\Review\Api\Data\IssueInterface" type="Performance\Review\Model\Issue" />
+    <preference for="Performance\Review\Api\PhpConfigurationAnalyzerInterface" type="Performance\Review\Model\PhpConfigurationAnalyzer" />
+    <preference for="Performance\Review\Api\MysqlConfigurationAnalyzerInterface" type="Performance\Review\Model\MysqlConfigurationAnalyzer" />
+    <preference for="Performance\Review\Api\RedisConfigurationAnalyzerInterface" type="Performance\Review\Model\RedisConfigurationAnalyzer" />
     
     <!-- Command configuration -->
     <type name="Magento\Framework\Console\CommandList">
@@ -78,6 +81,24 @@
     </type>
     
     <type name="Performance\Review\Model\ApiAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\PhpConfigurationAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\MysqlConfigurationAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\RedisConfigurationAnalyzer">
         <arguments>
             <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
         </arguments>

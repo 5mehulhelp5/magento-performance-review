@@ -366,13 +366,35 @@ class DatabaseAnalyzer
             'report_compared_product_index' => 'Product comparison tracking'
         ];
         
-        foreach ($logTables as $table => $description) {
-            try {
+        try {
+            // Build a single query to get counts for all tables
+            $unions = [];
+            foreach ($logTables as $table => $description) {
                 $tableName = $this->connection->getTableName($table);
                 if ($this->connection->isTableExists($tableName)) {
-                    $count = $this->connection->fetchOne("SELECT COUNT(*) FROM " . $tableName);
+                    $select = $this->connection->select()
+                        ->from($tableName, [
+                            'table_name' => new \Zend_Db_Expr($this->connection->quote($table)),
+                            'row_count' => new \Zend_Db_Expr('COUNT(*)')
+                        ]);
+                    $unions[] = $select;
+                }
+            }
+            
+            if (!empty($unions)) {
+                // Execute single query with UNION
+                $unionSelect = $this->connection->select();
+                $unionSelect->union($unions, \Zend_Db_Select::SQL_UNION_ALL);
+                
+                $results = $this->connection->fetchAll($unionSelect);
+                
+                // Process results
+                foreach ($results as $result) {
+                    $table = $result['table_name'];
+                    $count = (int) $result['row_count'];
                     
                     if ($count > self::LOG_TABLE_ROW_THRESHOLD) {
+                        $description = $logTables[$table] ?? 'Log table';
                         $issues[] = $this->issueFactory->create([
                             'priority' => IssueInterface::PRIORITY_HIGH,
                             'category' => 'Database',
@@ -380,16 +402,16 @@ class DatabaseAnalyzer
                             'details' => sprintf(
                                 '%s table has %s rows. Large log tables impact performance.',
                                 $description,
-                                number_format((int) $count)
+                                number_format($count)
                             ),
-                            'current_value' => number_format((int) $count) . ' rows',
+                            'current_value' => number_format($count) . ' rows',
                             'recommended_value' => 'Configure log cleaning in Admin > System > Configuration > Advanced > System'
                         ]);
                     }
                 }
-            } catch (\Exception $e) {
-                $this->logger->warning('Failed to check log table ' . $table . ': ' . $e->getMessage());
             }
+        } catch (\Exception $e) {
+            $this->logger->warning('Failed to check log tables: ' . $e->getMessage());
         }
 
         return $issues;
@@ -406,7 +428,10 @@ class DatabaseAnalyzer
         
         try {
             $tableName = $this->connection->getTableName('url_rewrite');
-            $count = $this->connection->fetchOne("SELECT COUNT(*) FROM " . $tableName);
+            // Use select builder to avoid SQL injection
+            $select = $this->connection->select()
+                ->from($tableName, ['count' => new \Zend_Db_Expr('COUNT(*)')]);
+            $count = $this->connection->fetchOne($select);
             
             if ($count > self::URL_REWRITE_CRITICAL) {
                 $issues[] = $this->issueFactory->create([

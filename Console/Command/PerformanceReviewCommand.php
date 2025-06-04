@@ -19,6 +19,9 @@ use Performance\Review\Model\FrontendAnalyzer;
 use Performance\Review\Model\IndexerCronAnalyzer;
 use Performance\Review\Model\ThirdPartyAnalyzer;
 use Performance\Review\Model\ApiAnalyzer;
+use Performance\Review\Model\PhpConfigurationAnalyzer;
+use Performance\Review\Model\MysqlConfigurationAnalyzer;
+use Performance\Review\Model\RedisConfigurationAnalyzer;
 use Performance\Review\Model\ReportGenerator;
 use Performance\Review\Model\IssueFactory;
 use Performance\Review\Api\Data\IssueInterface;
@@ -78,6 +81,21 @@ class PerformanceReviewCommand extends Command
     private ApiAnalyzer $apiAnalyzer;
 
     /**
+     * @var PhpConfigurationAnalyzer
+     */
+    private PhpConfigurationAnalyzer $phpConfigurationAnalyzer;
+
+    /**
+     * @var MysqlConfigurationAnalyzer
+     */
+    private MysqlConfigurationAnalyzer $mysqlConfigurationAnalyzer;
+
+    /**
+     * @var RedisConfigurationAnalyzer
+     */
+    private RedisConfigurationAnalyzer $redisConfigurationAnalyzer;
+
+    /**
      * @var ReportGenerator
      */
     private ReportGenerator $reportGenerator;
@@ -103,6 +121,9 @@ class PerformanceReviewCommand extends Command
      * @param IndexerCronAnalyzer $indexerCronAnalyzer
      * @param ThirdPartyAnalyzer $thirdPartyAnalyzer
      * @param ApiAnalyzer $apiAnalyzer
+     * @param PhpConfigurationAnalyzer $phpConfigurationAnalyzer
+     * @param MysqlConfigurationAnalyzer $mysqlConfigurationAnalyzer
+     * @param RedisConfigurationAnalyzer $redisConfigurationAnalyzer
      * @param ReportGenerator $reportGenerator
      * @param IssueFactory $issueFactory
      * @param LoggerInterface $logger
@@ -117,6 +138,9 @@ class PerformanceReviewCommand extends Command
         IndexerCronAnalyzer $indexerCronAnalyzer,
         ThirdPartyAnalyzer $thirdPartyAnalyzer,
         ApiAnalyzer $apiAnalyzer,
+        PhpConfigurationAnalyzer $phpConfigurationAnalyzer,
+        MysqlConfigurationAnalyzer $mysqlConfigurationAnalyzer,
+        RedisConfigurationAnalyzer $redisConfigurationAnalyzer,
         ReportGenerator $reportGenerator,
         IssueFactory $issueFactory,
         LoggerInterface $logger,
@@ -130,6 +154,9 @@ class PerformanceReviewCommand extends Command
         $this->indexerCronAnalyzer = $indexerCronAnalyzer;
         $this->thirdPartyAnalyzer = $thirdPartyAnalyzer;
         $this->apiAnalyzer = $apiAnalyzer;
+        $this->phpConfigurationAnalyzer = $phpConfigurationAnalyzer;
+        $this->mysqlConfigurationAnalyzer = $mysqlConfigurationAnalyzer;
+        $this->redisConfigurationAnalyzer = $redisConfigurationAnalyzer;
         $this->reportGenerator = $reportGenerator;
         $this->issueFactory = $issueFactory;
         $this->logger = $logger;
@@ -153,7 +180,7 @@ class PerformanceReviewCommand extends Command
                 'category',
                 'c',
                 InputOption::VALUE_OPTIONAL,
-                'Run review for specific category only (config, modules, codebase, database, frontend, indexing, thirdparty, api)'
+                'Run review for specific category only (config, modules, codebase, database, frontend, indexing, thirdparty, api, php, mysql, redis)'
             )
             ->addOption(
                 'no-color',
@@ -244,6 +271,30 @@ class PerformanceReviewCommand extends Command
                 $output->write('Analyzing API configuration... ');
                 $apiIssues = $this->convertArraysToIssues($this->apiAnalyzer->analyzeApi());
                 $issues = array_merge($issues, $apiIssues);
+                $output->writeln('<info>✓</info>');
+            }
+            
+            // Run PHP configuration analysis
+            if (!$category || $category === 'php') {
+                $output->write('Analyzing PHP configuration... ');
+                $phpIssues = $this->convertArraysToIssues($this->phpConfigurationAnalyzer->analyzePHPConfiguration());
+                $issues = array_merge($issues, $phpIssues);
+                $output->writeln('<info>✓</info>');
+            }
+            
+            // Run MySQL configuration analysis
+            if (!$category || $category === 'mysql') {
+                $output->write('Analyzing MySQL configuration... ');
+                $mysqlIssues = $this->convertArraysToIssues($this->mysqlConfigurationAnalyzer->analyzeMysqlConfiguration());
+                $issues = array_merge($issues, $mysqlIssues);
+                $output->writeln('<info>✓</info>');
+            }
+            
+            // Run Redis configuration analysis
+            if (!$category || $category === 'redis') {
+                $output->write('Analyzing Redis configuration... ');
+                $redisIssues = $this->convertArraysToIssues($this->redisConfigurationAnalyzer->analyzeRedisConfiguration());
+                $issues = array_merge($issues, $redisIssues);
                 $output->writeln('<info>✓</info>');
             }
         } catch (\Exception $e) {

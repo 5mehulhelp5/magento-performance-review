@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace Performance\Review\Model;
 
@@ -107,9 +108,12 @@ class ApiAnalyzer
         $issues = [];
 
         try {
-            // Check for excessive OAuth tokens
-            $tokenCollection = $this->tokenCollectionFactory->create();
-            $totalTokens = $tokenCollection->getSize();
+            // Check for excessive OAuth tokens - use direct query instead of collection for performance
+            $connection = $this->resourceConnection->getConnection();
+            $tokenTable = $connection->getTableName('oauth_token');
+            $select = $connection->select()
+                ->from($tokenTable, ['count' => new \Zend_Db_Expr('COUNT(*)')]);
+            $totalTokens = (int) $connection->fetchOne($select);
             
             if ($totalTokens > 10000) {
                 $issues[] = [
@@ -126,10 +130,11 @@ class ApiAnalyzer
             }
 
             // Check for expired tokens
-            $connection = $this->resourceConnection->getConnection();
-            $expiredTokens = $connection->fetchOne(
-                "SELECT COUNT(*) FROM oauth_token WHERE expires IS NOT NULL AND expires < NOW()"
-            );
+            $select = $connection->select()
+                ->from($tokenTable, ['count' => new \Zend_Db_Expr('COUNT(*)')])
+                ->where('expires IS NOT NULL')
+                ->where('expires < NOW()');
+            $expiredTokens = (int) $connection->fetchOne($select);
 
             if ($expiredTokens > 1000) {
                 $issues[] = [
