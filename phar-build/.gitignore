@@ -1,0 +1,4 @@
+vendor/
+composer.lock
+magento-performance-review.phar
+*.log
