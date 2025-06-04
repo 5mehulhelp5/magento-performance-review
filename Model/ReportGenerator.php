@@ -34,9 +34,10 @@ class ReportGenerator
      * Generate performance report
      *
      * @param IssueInterface[] $issues
+     * @param bool $showDetails
      * @return string
      */
-    public function generateReport(array $issues): string
+    public function generateReport(array $issues, bool $showDetails = false): string
     {
         $report = $this->generateHeader();
         
@@ -45,7 +46,7 @@ class ReportGenerator
         
         // Generate sections
         foreach ($groupedIssues as $category => $categoryIssues) {
-            $report .= $this->generateCategorySection($category, $categoryIssues);
+            $report .= $this->generateCategorySection($category, $categoryIssues, $showDetails);
         }
         
         // Add summary
@@ -112,9 +113,10 @@ class ReportGenerator
      *
      * @param string $category
      * @param IssueInterface[] $issues
+     * @param bool $showDetails
      * @return string
      */
-    private function generateCategorySection(string $category, array $issues): string
+    private function generateCategorySection(string $category, array $issues, bool $showDetails = false): string
     {
         $section = "== $category ==\n";
         $section .= str_repeat('-', 80) . "\n";
@@ -170,6 +172,55 @@ class ReportGenerator
                     "",
                     $issue->getRecommendedValue()
                 );
+            }
+            
+            // Show detailed information if requested
+            if ($showDetails) {
+                // Show module list if available
+                $moduleList = $issue->getData('module_list');
+                if ($moduleList && is_array($moduleList)) {
+                    $section .= sprintf("%-10s | %-40s | \n", "", "");
+                    $section .= sprintf("%-10s | %-40s | Module List:\n", "", "");
+                    foreach ($moduleList as $module) {
+                        $section .= sprintf("%-10s | %-40s | - %s\n", "", "", $module);
+                    }
+                }
+                
+                // Show disabled modules if available
+                $disabledModules = $issue->getData('disabled_modules');
+                if ($disabledModules && is_array($disabledModules)) {
+                    $section .= sprintf("%-10s | %-40s | \n", "", "");
+                    $section .= sprintf("%-10s | %-40s | Disabled Modules:\n", "", "");
+                    foreach ($disabledModules as $module) {
+                        $section .= sprintf("%-10s | %-40s | - %s\n", "", "", $module);
+                    }
+                }
+                
+                // Show duplicate modules if available
+                $duplicateModules = $issue->getData('duplicate_modules');
+                if ($duplicateModules && is_array($duplicateModules)) {
+                    $section .= sprintf("%-10s | %-40s | \n", "", "");
+                    foreach ($duplicateModules as $type => $info) {
+                        $section .= sprintf("%-10s | %-40s | %s modules (%d):\n", "", "", ucfirst($type), $info['count']);
+                        foreach (array_slice($info['modules'], 0, 5) as $module) {
+                            $section .= sprintf("%-10s | %-40s | - %s\n", "", "", $module);
+                        }
+                        if (count($info['modules']) > 5) {
+                            $section .= sprintf("%-10s | %-40s | ... and %d more\n", "", "", count($info['modules']) - 5);
+                        }
+                    }
+                }
+                
+                // Show impacting modules if available
+                $impactingModules = $issue->getData('impacting_modules');
+                if ($impactingModules && is_array($impactingModules)) {
+                    $section .= sprintf("%-10s | %-40s | \n", "", "");
+                    $section .= sprintf("%-10s | %-40s | Performance-impacting modules:\n", "", "");
+                    foreach ($impactingModules as $module => $reason) {
+                        $section .= sprintf("%-10s | %-40s | - %s\n", "", "", $module);
+                        $section .= sprintf("%-10s | %-40s |   %s\n", "", "", $reason);
+                    }
+                }
             }
             
             $section .= str_repeat('-', 10) . '+' . str_repeat('-', 42) . '+' . str_repeat('-', 27) . "\n";

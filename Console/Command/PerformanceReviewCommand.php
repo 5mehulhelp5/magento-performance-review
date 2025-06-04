@@ -160,6 +160,12 @@ class PerformanceReviewCommand extends Command
                 null,
                 InputOption::VALUE_NONE,
                 'Disable colored output'
+            )
+            ->addOption(
+                'details',
+                'd',
+                InputOption::VALUE_NONE,
+                'Show detailed information for issues (e.g., list of modules)'
             );
     }
 
@@ -249,7 +255,8 @@ class PerformanceReviewCommand extends Command
         $output->writeln('');
         
         // Generate report
-        $report = $this->reportGenerator->generateReport($issues);
+        $showDetails = $input->getOption('details');
+        $report = $this->reportGenerator->generateReport($issues, $showDetails);
         
         // Handle output
         $outputFile = $input->getOption('output-file');

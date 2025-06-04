@@ -40,4 +40,52 @@
             <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
         </arguments>
     </type>
+    
+    <type name="Performance\Review\Model\DatabaseAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\ModuleAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\ThirdPartyAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\CodebaseAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\FrontendAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\IndexerCronAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Model\ApiAnalyzer">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
+    
+    <type name="Performance\Review\Console\Command\PerformanceReviewCommand">
+        <arguments>
+            <argument name="logger" xsi:type="object">Performance\Review\Logger</argument>
+        </arguments>
+    </type>
 </config>

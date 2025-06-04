@@ -1,4 +1,9 @@
 <?php
+/**
+ * Copyright © Performance, Inc. All rights reserved.
+ * See COPYING.txt for license details.
+ */
+declare(strict_types=1);
 
 namespace Performance\Review\Model;
 
@@ -6,13 +11,46 @@ use Magento\Framework\Module\ModuleListInterface;
 use Magento\Framework\Component\ComponentRegistrarInterface;
 use Magento\Framework\Filesystem\Driver\File;
 use Magento\Framework\App\ProductMetadataInterface;
+use Performance\Review\Api\Data\IssueInterface;
+use Performance\Review\Model\IssueFactory;
+use Psr\Log\LoggerInterface;
 
+/**
+ * Third-party extension analyzer
+ *
+ * @since 1.0.0
+ */
 class ThirdPartyAnalyzer
 {
+    /**
+     * @var ModuleListInterface
+     */
     private ModuleListInterface $moduleList;
+
+    /**
+     * @var ComponentRegistrarInterface
+     */
     private ComponentRegistrarInterface $componentRegistrar;
+
+    /**
+     * @var File
+     */
     private File $fileDriver;
+
+    /**
+     * @var ProductMetadataInterface
+     */
     private ProductMetadataInterface $productMetadata;
+
+    /**
+     * @var IssueFactory
+     */
+    private IssueFactory $issueFactory;
+
+    /**
+     * @var LoggerInterface
+     */
+    private LoggerInterface $logger;
 
     // Known problematic extensions
     private const PROBLEMATIC_EXTENSIONS = [
@@ -39,18 +77,37 @@ class ThirdPartyAnalyzer
         ]
     ];
 
+    /**
+     * Constructor
+     *
+     * @param ModuleListInterface $moduleList
+     * @param ComponentRegistrarInterface $componentRegistrar
+     * @param File $fileDriver
+     * @param ProductMetadataInterface $productMetadata
+     * @param IssueFactory $issueFactory
+     * @param LoggerInterface $logger
+     */
     public function __construct(
         ModuleListInterface $moduleList,
         ComponentRegistrarInterface $componentRegistrar,
         File $fileDriver,
-        ProductMetadataInterface $productMetadata
+        ProductMetadataInterface $productMetadata,
+        IssueFactory $issueFactory,
+        LoggerInterface $logger
     ) {
         $this->moduleList = $moduleList;
         $this->componentRegistrar = $componentRegistrar;
         $this->fileDriver = $fileDriver;
         $this->productMetadata = $productMetadata;
+        $this->issueFactory = $issueFactory;
+        $this->logger = $logger;
     }
 
+    /**
+     * Analyze third-party extensions for issues
+     *
+     * @return IssueInterface[]
+     */
     public function analyzeThirdPartyExtensions(): array
     {
         $issues = [];
@@ -103,8 +160,8 @@ class ThirdPartyAnalyzer
         $count = count($thirdPartyModules);
         
         if ($count > 50) {
-            $issues[] = [
-                'priority' => 'High',
+            $issues[] = $this->issueFactory->create([
+                'priority' => IssueInterface::PRIORITY_HIGH,
                 'category' => 'Third-party',
                 'issue' => 'Excessive third-party extensions',
                 'details' => sprintf(
@@ -113,10 +170,10 @@ class ThirdPartyAnalyzer
                 ),
                 'current_value' => $count . ' third-party extensions',
                 'recommended_value' => 'Audit and remove unnecessary extensions'
-            ];
+            ]);
         } elseif ($count > 30) {
-            $issues[] = [
-                'priority' => 'Medium',
+            $issues[] = $this->issueFactory->create([
+                'priority' => IssueInterface::PRIORITY_MEDIUM,
                 'category' => 'Third-party',
                 'issue' => 'Large number of third-party extensions',
                 'details' => sprintf(
@@ -125,7 +182,7 @@ class ThirdPartyAnalyzer
                 ),
                 'current_value' => $count . ' third-party extensions',
                 'recommended_value' => 'Review extension necessity'
-            ];
+            ]);
         }
 
         return $issues;
@@ -158,14 +215,14 @@ class ThirdPartyAnalyzer
                 $details .= sprintf("- %s: %s\n", implode(', ', $modules), $info['issue']);
             }
             
-            $issues[] = [
-                'priority' => 'Medium',
+            $issues[] = $this->issueFactory->create([
+                'priority' => IssueInterface::PRIORITY_MEDIUM,
                 'category' => 'Third-party',
                 'issue' => 'Extensions with known performance impacts',
                 'details' => trim($details),
                 'current_value' => 'Potentially problematic extensions found',
                 'recommended_value' => 'Review extension necessity and configuration'
-            ];
+            ]);
         }
 
         return $issues;
@@ -180,8 +237,8 @@ class ThirdPartyAnalyzer
             $found = array_intersect($info['extensions'], $allModules);
             
             if (count($found) > 1) {
-                $issues[] = [
-                    'priority' => 'High',
+                $issues[] = $this->issueFactory->create([
+                    'priority' => IssueInterface::PRIORITY_HIGH,
                     'category' => 'Third-party',
                     'issue' => sprintf('Conflicting %s extensions', $category),
                     'details' => sprintf(
@@ -191,7 +248,7 @@ class ThirdPartyAnalyzer
                     ),
                     'current_value' => count($found) . ' conflicting extensions',
                     'recommended_value' => 'Use only one extension per functionality'
-                ];
+                ]);
             }
         }
 
@@ -241,8 +298,8 @@ class ThirdPartyAnalyzer
         }
         
         if (!empty($incompatibleExtensions)) {
-            $issues[] = [
-                'priority' => 'High',
+            $issues[] = $this->issueFactory->create([
+                'priority' => IssueInterface::PRIORITY_HIGH,
                 'category' => 'Third-party',
                 'issue' => 'Potentially incompatible extensions',
                 'details' => sprintf(
@@ -252,7 +309,7 @@ class ThirdPartyAnalyzer
                 ),
                 'current_value' => count($incompatibleExtensions) . ' potentially incompatible',
                 'recommended_value' => 'Verify extension compatibility with current Magento version'
-            ];
+            ]);
         }
 
         return $issues;
@@ -280,8 +337,11 @@ class ThirdPartyAnalyzer
                             $content = $this->fileDriver->fileGetContents($registrationFile);
                             
                             // Check for old-style registration
-                            if (strpos($content, 'Mage::register') !== false ||
-                                strpos($content, 'Magento\Framework\Component\ComponentRegistrar::register') === false) {
+                            if (strpos($content, 'Mage::register') !== false) {
+                                $oldExtensions[] = $moduleName;
+                            } elseif (strpos($content, 'ComponentRegistrar::register') === false &&
+                                     strpos($content, '\Magento\Framework\Component\ComponentRegistrar::register') === false) {
+                                // Neither short form nor full namespace found
                                 $oldExtensions[] = $moduleName;
                             }
                         } catch (\Exception $e) {
@@ -293,8 +353,8 @@ class ThirdPartyAnalyzer
         }
         
         if (!empty($oldExtensions)) {
-            $issues[] = [
-                'priority' => 'Medium',
+            $issues[] = $this->issueFactory->create([
+                'priority' => IssueInterface::PRIORITY_MEDIUM,
                 'category' => 'Third-party',
                 'issue' => 'Outdated extension code detected',
                 'details' => sprintf(
@@ -303,7 +363,7 @@ class ThirdPartyAnalyzer
                 ),
                 'current_value' => count($oldExtensions) . ' outdated extensions',
                 'recommended_value' => 'Update extensions to use modern Magento 2 practices'
-            ];
+            ]);
         }
 
         return $issues;
