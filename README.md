@@ -1,19 +1,22 @@
 # Magento 2 Performance Review Tool
 
-A comprehensive performance analysis tool for Magento 2 that automatically identifies configuration issues, problematic modules, and codebase optimization opportunities.
+A comprehensive performance analysis tool for Magento 2.4.8 that automatically identifies configuration issues, problematic modules, infrastructure optimization opportunities, and codebase improvements.
 
 ## Overview
 
-This tool performs an automated analysis of your Magento 2 installation to identify performance bottlenecks and provide actionable recommendations. It examines eight key areas:
+This tool performs an automated analysis of your Magento 2 installation to identify performance bottlenecks and provide actionable recommendations. It examines eleven key areas:
 
 1. **Configuration** - Deployment mode, caching backends, and system settings
-2. **Database** - Table sizes, catalog size, log tables, URL rewrites
-3. **Indexing & Cron** - Indexer status, cron jobs, stuck processes
-4. **Frontend** - JS/CSS optimization, image formats, CDN usage
-5. **Modules** - Module count, performance impact, and redundancy
-6. **Third-party Extensions** - Compatibility, conflicts, known issues
-7. **Codebase** - Custom code volume, event observers, plugins, and preferences
-8. **API** - Rate limiting, authentication, GraphQL/REST configuration
+2. **PHP Configuration** - PHP version, memory limits, OPcache settings, realpath cache
+3. **MySQL Configuration** - InnoDB settings, buffer pool, query optimization
+4. **Redis Configuration** - Cache backend, session storage, eviction policies
+5. **Database** - Table sizes, catalog size, log tables, URL rewrites
+6. **Indexing & Cron** - Indexer status, cron jobs, stuck processes
+7. **Frontend** - JS/CSS optimization, image formats, CDN usage
+8. **Modules** - Module count (excluding core), performance impact, and redundancy
+9. **Third-party Extensions** - Compatibility, conflicts, known issues
+10. **Codebase** - Custom code volume, event observers, plugins, and preferences
+11. **API** - Rate limiting, authentication, GraphQL/REST configuration
 
 ## Features
 
@@ -49,8 +52,9 @@ php bin/magento performance:review
 | `--output-file` or `-o` | Save report to file | `--output-file=report.txt` |
 | `--category` or `-c` | Run specific category only | `--category=database` |
 | `--no-color` | Disable colored output | `--no-color` |
+| `--details` | Show detailed information (e.g., module list) | `--details` |
 
-Available categories: `config`, `database`, `frontend`, `indexing`, `modules`, `thirdparty`, `codebase`, `api`
+Available categories: `config`, `php`, `mysql`, `redis`, `database`, `frontend`, `indexing`, `modules`, `thirdparty`, `codebase`, `api`
 
 ### Examples
 
@@ -61,8 +65,17 @@ php bin/magento performance:review --output-file=performance-report.txt
 # Check only configuration
 php bin/magento performance:review --category=config
 
-# Check only modules
-php bin/magento performance:review --category=modules
+# Check PHP configuration
+php bin/magento performance:review --category=php
+
+# Check MySQL configuration
+php bin/magento performance:review --category=mysql
+
+# Check Redis configuration
+php bin/magento performance:review --category=redis
+
+# Check only modules with detailed list
+php bin/magento performance:review --category=modules --details
 
 # Check only codebase
 php bin/magento performance:review --category=codebase
@@ -77,6 +90,28 @@ php bin/magento performance:review --output-file=report.txt --no-color
 - **Deployment Mode**: Warns if running in developer mode
 - **Redis Configuration**: Checks if Redis is configured for caching
 - **Cache Status**: Verifies all cache types are enabled
+
+### PHP Configuration Checks
+- **PHP Version**: Validates PHP version compatibility (8.1, 8.2, 8.3 for Magento 2.4.8)
+- **Memory Settings**: memory_limit, max_execution_time, max_input_vars, upload sizes
+- **Realpath Cache**: Size and TTL for file system performance
+- **OPcache Settings**: Memory consumption, max files, validation settings
+- **Problematic Extensions**: Detects Xdebug, ionCube Loader in production
+
+### MySQL Configuration Checks
+- **Version Check**: MySQL 8.0+ or MariaDB 10.4+ recommended
+- **InnoDB Settings**: Buffer pool size (70% RAM), thread concurrency, log file size
+- **Connection Settings**: max_connections, thread_cache_size, table_open_cache
+- **Query Cache**: Warns if enabled (deprecated in MySQL 8.0)
+- **Performance Schema**: Suggests disabling in production for overhead reduction
+- **Storage Engine**: Ensures all tables use InnoDB
+
+### Redis Configuration Checks
+- **Connection**: Validates Redis server accessibility
+- **Version**: Redis 6.0+ or 7.0+ recommended
+- **Memory Settings**: maxmemory and eviction policies
+- **Persistence**: AOF and RDB settings for data durability
+- **Performance**: TCP settings, timeout values, database count
 
 ### Database Checks
 - **Database Size**: Warns if database exceeds 20GB/50GB
@@ -103,10 +138,11 @@ php bin/magento performance:review --output-file=report.txt --no-color
 - **CDN**: Checks if CDN is configured for static/media files
 
 ### Module Analysis
-- **Module Count**: Warns if more than 200 modules are active
+- **Module Count**: Warns if more than 200 non-core modules are active (excludes Magento core modules)
 - **Performance Impact**: Identifies known performance-impacting modules
 - **Disabled Modules**: Finds modules that are disabled but not removed
 - **Duplicate Functionality**: Detects multiple modules serving similar purposes
+- **Detailed View**: Use `--details` flag to see the complete list of modules
 
 ### Third-party Extension Checks
 - **Extension Count**: Warns if >30-50 third-party extensions
@@ -210,13 +246,43 @@ Recommended Actions:
    php bin/magento setup:config:set --cache-backend=redis --cache-backend-redis-server=127.0.0.1 --cache-backend-redis-db=0
    ```
 
-3. **Fix Invalid Indexers**
+3. **Optimize PHP Configuration**
+   ```bash
+   # Edit php.ini
+   memory_limit = 2048M
+   max_execution_time = 18000
+   realpath_cache_size = 10M
+   realpath_cache_ttl = 86400
+   
+   # OPcache settings
+   opcache.enable = 1
+   opcache.memory_consumption = 512
+   opcache.max_accelerated_files = 130000
+   opcache.validate_timestamps = 0  # Production only
+   opcache.interned_strings_buffer = 32
+   ```
+
+4. **Optimize MySQL Configuration**
+   ```bash
+   # Edit my.cnf or my.ini
+   [mysqld]
+   innodb_buffer_pool_size = 70% of RAM  # e.g., 8G for 12GB RAM
+   innodb_thread_concurrency = 0
+   innodb_flush_log_at_trx_commit = 2
+   innodb_log_file_size = 512M
+   innodb_buffer_pool_instances = 8
+   max_connections = 1000
+   thread_cache_size = 100
+   table_open_cache = 8000
+   ```
+
+5. **Fix Invalid Indexers**
    ```bash
    php bin/magento indexer:reindex
    php bin/magento indexer:set-mode schedule
    ```
 
-4. **Enable Frontend Optimizations**
+6. **Enable Frontend Optimizations**
    ```bash
    # Enable JS/CSS optimizations
    php bin/magento config:set dev/js/enable_js_bundling 1
@@ -224,7 +290,7 @@ Recommended Actions:
    php bin/magento config:set dev/css/minify_files 1
    ```
 
-5. **Clean Database Tables**
+7. **Clean Database Tables**
    ```bash
    # Clean log tables
    php bin/magento log:clean --days 7
@@ -237,6 +303,7 @@ Recommended Actions:
 
 1. **Review Active Modules**
    - List all modules: `php bin/magento module:status`
+   - List only non-core modules: `php bin/magento performance:review --category=modules --details`
    - Disable unnecessary modules: `php bin/magento module:disable Vendor_Module`
 
 2. **Optimize Heavy Modules**
@@ -290,6 +357,9 @@ Based on real-world Magento 2 deployments, this tool focuses on the most common 
 
 The tool's thresholds can be modified by editing the analyzer classes in:
 - `Model/ConfigurationChecker.php`
+- `Model/PhpConfigurationAnalyzer.php`
+- `Model/MysqlConfigurationAnalyzer.php`
+- `Model/RedisConfigurationAnalyzer.php`
 - `Model/ModuleAnalyzer.php`
 - `Model/CodebaseAnalyzer.php`
 - `Model/DatabaseAnalyzer.php`
